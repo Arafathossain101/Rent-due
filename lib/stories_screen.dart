@@ -7,6 +7,15 @@ import 'storage.dart';
 // ======================================================
 // STORIES SCREEN
 // ======================================================
+//
+// Elderly-friendly UI:
+// - Larger text and icons
+// - Bigger touch targets
+// - Clear labels and hints
+// - Higher contrast
+//
+// Core functions are unchanged.
+// ======================================================
 
 class StoriesScreen extends StatefulWidget {
   final House house;
@@ -104,23 +113,25 @@ class _StoriesScreenState extends State<StoriesScreen> {
               Icon(
                 Icons.warning_amber_rounded,
                 color: Colors.red,
-                size: 28,
+                size: 30,
               ),
-              SizedBox(width: 10),
-              Text(
-                'Delete Room?',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Delete Room?',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                  ),
                 ),
               ),
             ],
           ),
-
           content: Text(
             'Are you sure you want to delete Room ${room.name}?\n\n'
             'This will remove the room from this floor.',
+            style: const TextStyle(fontSize: 17),
           ),
-
           actions: [
             // CANCEL
             TextButton(
@@ -131,6 +142,7 @@ class _StoriesScreenState extends State<StoriesScreen> {
                 'Cancel',
                 style: TextStyle(
                   color: Colors.grey,
+                  fontSize: 17,
                 ),
               ),
             ),
@@ -143,8 +155,15 @@ class _StoriesScreenState extends State<StoriesScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
               ),
-              child: const Text('Delete'),
+              child: const Text(
+                'Delete',
+                style: TextStyle(fontSize: 17),
+              ),
             ),
           ],
         );
@@ -168,6 +187,7 @@ class _StoriesScreenState extends State<StoriesScreen> {
         SnackBar(
           content: Text(
             'Room ${room.name} deleted.',
+            style: const TextStyle(fontSize: 16),
           ),
           duration: const Duration(seconds: 2),
         ),
@@ -215,6 +235,18 @@ class _StoriesScreenState extends State<StoriesScreen> {
 
       // Save updated data
       widget.onHouseUpdated();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Room image updated.',
+              style: TextStyle(fontSize: 16),
+            ),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) {
         return;
@@ -224,6 +256,7 @@ class _StoriesScreenState extends State<StoriesScreen> {
         SnackBar(
           content: Text(
             'Could not select image: $e',
+            style: const TextStyle(fontSize: 16),
           ),
         ),
       );
@@ -241,25 +274,26 @@ class _StoriesScreenState extends State<StoriesScreen> {
         title: Text(
           widget.house.name,
           style: const TextStyle(
-            fontSize: 24,
+            fontSize: 26,
             fontWeight: FontWeight.bold,
           ),
         ),
         backgroundColor:
             Theme.of(context).colorScheme.inversePrimary,
       ),
-
       body: SafeArea(
         child: widget.house.floors.isEmpty
             ? const Center(
                 child: Text(
                   'No stories found.',
                   style: TextStyle(
-                    fontSize: 24,
+                    fontSize: 22,
+                    color: Colors.grey,
                   ),
                 ),
               )
             : ListView.builder(
+                padding: const EdgeInsets.only(bottom: 20),
                 itemCount: widget.house.floors.length,
                 itemBuilder: (context, floorIndex) {
                   return _buildFloorRow(floorIndex);
@@ -277,23 +311,26 @@ class _StoriesScreenState extends State<StoriesScreen> {
     final floor = widget.house.floors[floorIndex];
 
     return Container(
-      // Reduced height
-      height: 220,
-
+      height: 250,
       margin: const EdgeInsets.symmetric(
-        vertical: 8,
+        vertical: 10,
+        horizontal: 8,
       ),
-
       decoration: BoxDecoration(
         color: Colors.grey.shade100,
-        border: const Border(
-          bottom: BorderSide(
-            color: Colors.grey,
-            width: 1.5,
-          ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.grey.shade400,
+          width: 1.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-
       child: Row(
         children: [
           // ==================================================
@@ -301,25 +338,26 @@ class _StoriesScreenState extends State<StoriesScreen> {
           // ==================================================
 
           Container(
-            // Reduced width from 140 -> 110
-            width: 110,
-
-            padding: const EdgeInsets.all(6),
-
+            width: 118,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 6,
+              vertical: 12,
+            ),
             decoration: BoxDecoration(
               color: Colors.teal.shade50,
-
-              border: const Border(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(15),
+                bottomLeft: Radius.circular(15),
+              ),
+              border: Border(
                 right: BorderSide(
-                  color: Colors.grey,
+                  color: Colors.grey.shade400,
                   width: 1.5,
                 ),
               ),
             ),
-
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-
               children: [
                 // ------------------------------------------------
                 // FLOOR NUMBER
@@ -327,75 +365,83 @@ class _StoriesScreenState extends State<StoriesScreen> {
 
                 Text(
                   '${_getOrdinal(floor.floorNumber)}\nFloor',
-
                   textAlign: TextAlign.center,
-
                   style: const TextStyle(
-                    fontSize: 21,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    height: 1.15,
+                    height: 1.2,
                   ),
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
 
                 // ------------------------------------------------
-                // REMOVE + ADD BUTTONS
+                // REMOVE + ADD BUTTONS (larger for elders)
                 // ------------------------------------------------
 
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     // REMOVE BUTTON
-                    InkWell(
-                      onTap: () => _removeRoom(floorIndex),
-
-                      borderRadius: BorderRadius.circular(50),
-
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade100,
-                          shape: BoxShape.circle,
-                        ),
-
-                        child: const Icon(
-                          Icons.remove,
-                          size: 24,
-                          color: Colors.red,
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _removeRoom(floorIndex),
+                        borderRadius: BorderRadius.circular(50),
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade100,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.red.shade300,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.remove,
+                            size: 26,
+                            color: Colors.red,
+                          ),
                         ),
                       ),
                     ),
 
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
 
                     // ADD BUTTON
-                    InkWell(
-                      onTap: () => _addRoom(floorIndex),
-
-                      borderRadius: BorderRadius.circular(50),
-
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade100,
-                          shape: BoxShape.circle,
-                        ),
-
-                        child: const Icon(
-                          Icons.add,
-                          size: 24,
-                          color: Colors.green,
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _addRoom(floorIndex),
+                        borderRadius: BorderRadius.circular(50),
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade100,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.green.shade300,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            size: 26,
+                            color: Colors.green,
+                          ),
                         ),
                       ),
                     ),
                   ],
                 ),
 
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
 
                 // ------------------------------------------------
                 // ROOM COUNT
@@ -403,9 +449,9 @@ class _StoriesScreenState extends State<StoriesScreen> {
 
                 Text(
                   '${floor.rooms.length} Rooms',
-
                   style: const TextStyle(
                     fontSize: 14,
+                    fontWeight: FontWeight.w600,
                     color: Colors.black54,
                   ),
                 ),
@@ -419,26 +465,27 @@ class _StoriesScreenState extends State<StoriesScreen> {
 
           Expanded(
             child: floor.rooms.isEmpty
-                ? const Center(
-                    child: Text(
-                      'Tap (+) to add rooms',
-
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: Colors.grey,
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        'Tap  +  to add rooms',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   )
                 : ListView.builder(
                     scrollDirection: Axis.horizontal,
-
                     itemCount: floor.rooms.length,
-
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 12,
+                      horizontal: 12,
+                      vertical: 14,
                     ),
-
                     itemBuilder: (
                       context,
                       roomIndex,
@@ -466,6 +513,9 @@ class _StoriesScreenState extends State<StoriesScreen> {
     final room =
         widget.house.floors[floorIndex].rooms[roomIndex];
 
+    final bool hasImage =
+        room.imagePath != null && room.imagePath!.isNotEmpty;
+
     return GestureDetector(
       onTap: () {
         // Navigate to the Record Screen
@@ -474,39 +524,25 @@ class _StoriesScreenState extends State<StoriesScreen> {
           MaterialPageRoute(
             builder: (context) => RecordScreen(
               room: room,
-              onDataChanged: widget.onHouseUpdated, // Keep saving data up the chain!
+              onDataChanged: widget.onHouseUpdated,
             ),
           ),
         ).then((_) {
-          setState(() {}); // Refresh the door when returning, just in case
+          setState(() {}); // Refresh when returning
         });
       },
       onLongPress: () => _pickRoomImage(floorIndex, roomIndex),
-      
-
       child: Container(
-        // Increased width from 130 -> 155
-        width: 155,
-
-        margin: const EdgeInsets.only(
-          right: 15,
-        ),
-
+        width: 165,
+        margin: const EdgeInsets.only(right: 14),
         decoration: BoxDecoration(
           color: Colors.brown.shade200,
-
-          borderRadius: BorderRadius.circular(10),
-
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: Colors.brown.shade800,
             width: 3,
           ),
-
-          // ==================================================
-          // ROOM IMAGE
-          // ==================================================
-
-          image: room.imagePath != null
+          image: hasImage
               ? DecorationImage(
                   image: FileImage(
                     File(room.imagePath!),
@@ -514,74 +550,95 @@ class _StoriesScreenState extends State<StoriesScreen> {
                   fit: BoxFit.cover,
                 )
               : null,
-
-          // ==================================================
-          // ROOM CARD SHADOW
-          // ==================================================
-
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withOpacity(0.45),
+              color: Colors.grey.withOpacity(0.4),
               spreadRadius: 1,
-              blurRadius: 5,
-              offset: const Offset(
-                3,
-                3,
-              ),
+              blurRadius: 6,
+              offset: const Offset(3, 3),
             ),
           ],
         ),
-
-        // ==================================================
-        // ROOM NUMBER
-        // ==================================================
-
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 10,
-              vertical: 5,
-            ),
-
-            decoration: BoxDecoration(
-              // More transparent so the image remains visible
-              color: Colors.white.withOpacity(0.40),
-
-              borderRadius: BorderRadius.circular(6),
-
-              border: Border.all(
-                color: Colors.white.withOpacity(0.50),
-                width: 1,
-              ),
-
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.18),
-                  blurRadius: 3,
-                  offset: const Offset(
-                    0,
-                    1,
+        child: Stack(
+          children: [
+            // ---------- ROOM NUMBER (center) ----------
+            Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.55),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.6),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  room.name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
                   ),
                 ),
-              ],
-            ),
-
-            child: Text(
-              // Example:
-              // 101
-              // 102
-              // 103
-              room.name,
-
-              textAlign: TextAlign.center,
-
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
               ),
             ),
-          ),
+
+            // ---------- HOLD TO ADD IMAGE HINT ----------
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.55),
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(11),
+                    bottomRight: Radius.circular(11),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      hasImage ? Icons.image : Icons.touch_app,
+                      size: 16,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        hasImage ? 'Hold to change' : 'Hold to add image',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

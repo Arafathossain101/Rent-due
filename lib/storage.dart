@@ -125,6 +125,7 @@ class Room {
   String renterName;
   String? renterIdImagePath;
   double baseRentAmount;
+  double previousDueAmount;
   List<Bill> bills;
   List<RentLog> logs;
 
@@ -135,6 +136,7 @@ class Room {
     this.renterName = '',
     this.renterIdImagePath,
     this.baseRentAmount = 0.0,
+    this.previousDueAmount = 0.0,
     List<Bill>? bills,
     List<RentLog>? logs,
   })  : bills = bills ?? [],
@@ -148,6 +150,7 @@ class Room {
       'renterName': renterName,
       'renterIdImagePath': renterIdImagePath,
       'baseRentAmount': baseRentAmount,
+      'previousDueAmount': previousDueAmount,
       'bills': bills.map((bill) => bill.toJson()).toList(),
       'logs': logs.map((log) => log.toJson()).toList(),
     };
@@ -179,6 +182,8 @@ class Room {
       renterName: json['renterName']?.toString() ?? '',
       renterIdImagePath: json['renterIdImagePath']?.toString(),
       baseRentAmount: (json['baseRentAmount'] as num?)?.toDouble() ?? 0.0,
+      previousDueAmount:
+          (json['previousDueAmount'] as num?)?.toDouble() ?? 0.0,
       bills: loadedBills,
       logs: loadedLogs,
     );

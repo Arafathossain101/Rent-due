@@ -89,114 +89,184 @@ class _RecordScreenState extends State<RecordScreen> {
   }
 
   // ======================================================
-  // AUTOMATIC DEFAULT BILLS (Rent + Gas + Electricity)
+  // AUTOMATIC MONTHLY BILLS
   // ======================================================
+
+  // Returns the latest amount for a bill type from months before the
+  // supplied month. Future scheduled amounts must never affect the
+  // current month's due.
+  double _lastKnownAmount({
+    required String name,
+    required bool isRent,
+    required DateTime beforeMonth,
+  }) {
+    if (isRent) return widget.room.baseRentAmount;
+
+    double lastAmount = 0;
+    DateTime? latestMonth;
+
+    for (final bill in widget.room.bills) {
+      if (bill.isRent) continue;
+      if (bill.name.toLowerCase().trim() != name.toLowerCase().trim()) {
+        continue;
+      }
+
+      final billMonth = _startOfMonth(bill.targetMonth);
+      if (!billMonth.isBefore(beforeMonth)) continue;
+
+      if (latestMonth == null || billMonth.isAfter(latestMonth)) {
+        latestMonth = billMonth;
+        lastAmount = bill.amount;
+      }
+    }
+
+    return lastAmount;
+  }
+
+  String _billIdentityKey(Bill bill) {
+    if (bill.isRent) return 'rent';
+    return bill.name.toLowerCase().trim();
+  }
+
+  Bill? _findBillForMonth({
+    required String identityKey,
+    required DateTime month,
+  }) {
+    for (final bill in widget.room.bills) {
+      if (_monthKey(bill.targetMonth) != _monthKey(month)) continue;
+      if (_billIdentityKey(bill) == identityKey) return bill;
+    }
+    return null;
+  }
 
   void _ensureDefaultBillsForCurrentMonth({
     bool createLog = true,
   }) {
-    final String monthKey = _currentMonthKey;
+    final currentMonth = _currentMonth;
     bool stateChanged = false;
 
-    // --- RENT ---
-    final bool rentExists = widget.room.bills.any(
-      (bill) => bill.isRent && _monthKey(bill.targetMonth) == monthKey,
-    );
+    void ensureBill({
+      required String name,
+      required bool isRent,
+      required double amount,
+      required String idSuffix,
+    }) {
+      final existing = _findBillForMonth(
+        identityKey: isRent ? 'rent' : name.toLowerCase().trim(),
+        month: currentMonth,
+      );
+      if (existing != null) return;
 
-    // Rent is now always added by default like Gas and Electricity
-    if (!rentExists) {
-      final double rentAmount = widget.room.baseRentAmount;
       widget.room.bills.add(
         Bill(
-          id: DateTime.now().microsecondsSinceEpoch.toString(),
-          name: 'Rent',
-          amount: rentAmount,
+          id: '${DateTime.now().microsecondsSinceEpoch}$idSuffix',
+          name: name,
+          amount: amount,
           paidAmount: 0,
-          isRent: true,
-          targetMonth: _currentMonth,
+          isRent: isRent,
+          targetMonth: currentMonth,
         ),
       );
       stateChanged = true;
+    }
 
-      if (createLog && rentAmount > 0) {
-        widget.room.logs.insert(
-          0,
-          RentLog(
-            id: DateTime.now().microsecondsSinceEpoch.toString(),
-            date: DateTime.now(),
-            description: 'Monthly rent added automatically: ${_money(rentAmount)}',
-          ),
-        );
+    // Core recurring bills.
+    ensureBill(
+      name: 'Rent',
+      isRent: true,
+      amount: widget.room.baseRentAmount,
+      idSuffix: '_rent',
+    );
+
+    ensureBill(
+      name: 'Gas',
+      isRent: false,
+      amount: _lastKnownAmount(
+        name: 'Gas',
+        isRent: false,
+        beforeMonth: currentMonth,
+      ),
+      idSuffix: '_gas',
+    );
+
+    ensureBill(
+      name: 'Electricity',
+      isRent: false,
+      amount: _lastKnownAmount(
+        name: 'Electricity',
+        isRent: false,
+        beforeMonth: currentMonth,
+      ),
+      idSuffix: '_elec',
+    );
+
+    // Any custom bill that was previously configured also recurs at the
+    // beginning of a new month, unless it already has a current-month bill.
+    final previousBills = widget.room.bills
+        .where((bill) => _startOfMonth(bill.targetMonth).isBefore(currentMonth))
+        .toList();
+
+    final Map<String, Bill> latestPreviousByType = {};
+    for (final bill in previousBills) {
+      final key = _billIdentityKey(bill);
+      final existing = latestPreviousByType[key];
+      if (existing == null || bill.targetMonth.isAfter(existing.targetMonth)) {
+        latestPreviousByType[key] = bill;
       }
     }
 
-    // --- GAS ---
-    final bool gasExists = widget.room.bills.any(
-      (bill) =>
-          !bill.isRent &&
-          bill.name.toLowerCase().trim() == 'gas' &&
-          _monthKey(bill.targetMonth) == monthKey,
-    );
+    for (final entry in latestPreviousByType.entries) {
+      final key = entry.key;
+      if (key == 'rent' || key == 'gas' || key == 'electricity') continue;
 
-    if (!gasExists) {
+      if (_findBillForMonth(identityKey: key, month: currentMonth) != null) {
+        continue;
+      }
+
+      final previous = entry.value;
       widget.room.bills.add(
         Bill(
-          id: '${DateTime.now().microsecondsSinceEpoch}_gas',
-          name: 'Gas',
-          amount: 0,
+          id: '${DateTime.now().microsecondsSinceEpoch}_recurring',
+          name: previous.name,
+          amount: previous.amount,
           paidAmount: 0,
           isRent: false,
-          targetMonth: _currentMonth,
-        ),
-      );
-      stateChanged = true;
-    }
-
-    // --- ELECTRICITY ---
-    final bool electricityExists = widget.room.bills.any(
-      (bill) =>
-          !bill.isRent &&
-          bill.name.toLowerCase().trim() == 'electricity' &&
-          _monthKey(bill.targetMonth) == monthKey,
-    );
-
-    if (!electricityExists) {
-      widget.room.bills.add(
-        Bill(
-          id: '${DateTime.now().microsecondsSinceEpoch}_elec',
-          name: 'Electricity',
-          amount: 0,
-          paidAmount: 0,
-          isRent: false,
-          targetMonth: _currentMonth,
+          targetMonth: currentMonth,
         ),
       );
       stateChanged = true;
     }
 
     if (stateChanged) {
-      setState(() {});
+      if (createLog && widget.room.baseRentAmount > 0) {
+        widget.room.logs.insert(
+          0,
+          RentLog(
+            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            date: DateTime.now(),
+            description:
+                'Monthly bills were added automatically for ${_monthName(currentMonth)} ${currentMonth.year}.',
+          ),
+        );
+      }
       widget.onDataChanged();
+      if (mounted) setState(() {});
     }
   }
 
   // ======================================================
-  // RAW REMAINING CALCULATION (Allows Negative)
+  // RAW REMAINING CALCULATION
   // ======================================================
-  
+
   double _getRawRemaining(Bill bill) {
     return bill.amount - bill.paidAmount;
   }
 
   // ======================================================
-  // CURRENT MONTH BILLS
+  // CURRENT BILLS / STATIC BILL CARDS
   // ======================================================
 
-  List<Bill> get _currentBills {
-    final bills = widget.room.bills
-        .where((bill) => _monthKey(bill.targetMonth) == _currentMonthKey)
-        .toList();
-
+  List<Bill> _sortBills(List<Bill> bills) {
     bills.sort((a, b) {
       if (a.isRent && !b.isRent) return -1;
       if (!a.isRent && b.isRent) return 1;
@@ -204,7 +274,10 @@ class _RecordScreenState extends State<RecordScreen> {
       const preferred = ['gas', 'electricity'];
       final aIdx = preferred.indexOf(a.name.toLowerCase().trim());
       final bIdx = preferred.indexOf(b.name.toLowerCase().trim());
-      if (aIdx != -1 && bIdx != -1) return aIdx.compareTo(bIdx);
+
+      if (aIdx != -1 && bIdx != -1) {
+        return aIdx.compareTo(bIdx);
+      }
       if (aIdx != -1) return -1;
       if (bIdx != -1) return 1;
 
@@ -214,15 +287,54 @@ class _RecordScreenState extends State<RecordScreen> {
     return bills;
   }
 
+  List<Bill> get _currentBills {
+    return _sortBills(
+      widget.room.bills
+          .where((bill) => _monthKey(bill.targetMonth) == _currentMonthKey)
+          .toList(),
+    );
+  }
+
+  // One static card per bill type. When a next-month amount has already
+  // been configured, that amount is shown on the card; otherwise the card
+  // shows the current month's amount. There is never a separate "next month"
+  // card.
+  List<Bill> get _addedBills {
+    final Map<String, Bill> visibleByType = {};
+    final currentKey = _currentMonthKey;
+    final nextKey = _monthKey(_nextMonth);
+
+    for (final bill in widget.room.bills) {
+      final key = _billIdentityKey(bill);
+      final monthKey = _monthKey(bill.targetMonth);
+      if (monthKey != currentKey && monthKey != nextKey) continue;
+
+      final existing = visibleByType[key];
+      if (existing == null) {
+        visibleByType[key] = bill;
+      } else {
+        final existingKey = _monthKey(existing.targetMonth);
+        // Prefer the next-month configured amount over the current-month
+        // amount for the static card.
+        if (monthKey == nextKey && existingKey != nextKey) {
+          visibleByType[key] = bill;
+        }
+      }
+    }
+
+    return _sortBills(visibleByType.values.toList());
+  }
+
   // ======================================================
   // TOTAL DUE
   // ======================================================
 
   double get _totalDue {
-    return _currentBills.fold(
+    final currentBillsDue = _currentBills.fold(
       0.0,
       (total, bill) => total + _getRawRemaining(bill),
     );
+    return currentBillsDue + widget.room.previousDueAmount;
   }
 
   // ======================================================
@@ -301,10 +413,6 @@ class _RecordScreenState extends State<RecordScreen> {
 
   Future<void> _showRenterDetailsDialog() async {
     final nameController = TextEditingController(text: widget.room.renterName);
-    final rentController = TextEditingController(
-      text: widget.room.baseRentAmount > 0 ? widget.room.baseRentAmount.toStringAsFixed(0) : '',
-    );
-
     String? selectedIdPath = widget.room.renterIdImagePath;
 
     final bool? saved = await showDialog<bool>(
@@ -327,20 +435,6 @@ class _RecordScreenState extends State<RecordScreen> {
                         hintText: 'Enter renter name',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.person, size: 28),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    TextField(
-                      controller: rentController,
-                      style: const TextStyle(fontSize: 18),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Monthly Rent Amount',
-                        hintText: 'Enter monthly rent',
-                        prefixText: '৳ ',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.home, size: 28),
                         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                       ),
                     ),
@@ -394,14 +488,7 @@ class _RecordScreenState extends State<RecordScreen> {
                   child: const Text('Cancel', style: TextStyle(fontSize: 17)),
                 ),
                 ElevatedButton(
-                  onPressed: () {
-                    final rent = double.tryParse(rentController.text.trim());
-                    if (rent == null || rent < 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid monthly rent.', style: TextStyle(fontSize: 16))));
-                      return;
-                    }
-                    Navigator.pop(dialogContext, true);
-                  },
+                  onPressed: () => Navigator.pop(dialogContext, true),
                   style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
                   child: const Text('Save', style: TextStyle(fontSize: 17)),
                 ),
@@ -413,45 +500,19 @@ class _RecordScreenState extends State<RecordScreen> {
     );
 
     if (saved != true || !mounted) {
-      _disposeControllersAfterDialog([nameController, rentController]);
+      _disposeControllersAfterDialog([nameController]);
       return;
     }
 
     final String newName = nameController.text.trim();
-    final double newRent = double.tryParse(rentController.text.trim()) ?? 0;
-    final double oldRent = widget.room.baseRentAmount;
 
     setState(() {
       widget.room.renterName = newName;
-      widget.room.baseRentAmount = newRent;
       widget.room.renterIdImagePath = selectedIdPath;
     });
 
-    Bill? currentRentBill;
-    for (final bill in widget.room.bills) {
-      if (bill.isRent && _monthKey(bill.targetMonth) == _currentMonthKey) {
-        currentRentBill = bill;
-        break;
-      }
-    }
-
-    if (currentRentBill != null) {
-      final paidAmount = currentRentBill.paidAmount;
-      setState(() {
-        currentRentBill!.amount = newRent;
-        // Allows keeping the current paid amount untouched so they can maintain overpayments
-      });
-    }
-
-    _ensureDefaultBillsForCurrentMonth(createLog: false);
-
-    String description = 'Renter information updated.';
-    if (oldRent != newRent) {
-      description += ' Monthly rent changed from ${_money(oldRent)} to ${_money(newRent)}.';
-    }
-
-    _addLog(description);
-    _disposeControllersAfterDialog([nameController, rentController]);
+    _addLog('Renter information updated.');
+    _disposeControllersAfterDialog([nameController]);
   }
 
   // ======================================================
@@ -579,8 +640,19 @@ class _RecordScreenState extends State<RecordScreen> {
     double remainingToPay = amount;
 
     setState(() {
+      // Previous Due is part of the current Total Due and is paid first.
+      if (widget.room.previousDueAmount > 0 && remainingToPay > 0) {
+        final previousDuePayment = remainingToPay > widget.room.previousDueAmount
+            ? widget.room.previousDueAmount
+            : remainingToPay;
+        widget.room.previousDueAmount -= previousDuePayment;
+        remainingToPay -= previousDuePayment;
+      }
+
       for (final bill in _currentBills) {
-        double billRemaining = _getRawRemaining(bill);
+        if (remainingToPay <= 0) break;
+
+        final billRemaining = _getRawRemaining(bill);
         if (billRemaining > 0) {
           if (remainingToPay >= billRemaining) {
             bill.paidAmount += billRemaining;
@@ -588,12 +660,12 @@ class _RecordScreenState extends State<RecordScreen> {
           } else {
             bill.paidAmount += remainingToPay;
             remainingToPay = 0;
-            break;
           }
         }
       }
 
-      // If overpaid, assign the negative balance primarily to the Rent bill
+      // Preserve the previous overpayment behavior by assigning any
+      // remaining payment to rent first, then the first current bill.
       if (remainingToPay > 0) {
         final rentBill = _getCurrentRentBill();
         if (rentBill != null) {
@@ -605,10 +677,15 @@ class _RecordScreenState extends State<RecordScreen> {
     });
 
     _addLog('Bills updated with payment: ${_money(amount)}.');
-    
+
     if (_totalDue <= 0 && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All bills have been fully paid.', style: TextStyle(fontSize: 16))),
+        const SnackBar(
+          content: Text(
+            'All bills have been fully paid.',
+            style: TextStyle(fontSize: 16),
+          ),
+        ),
       );
     }
   }
@@ -620,7 +697,9 @@ class _RecordScreenState extends State<RecordScreen> {
   Future<void> _showAddBillDialog() async {
     final nameController = TextEditingController();
     final amountController = TextEditingController();
-    String selectedMonth = 'current';
+
+    // All new bill amounts are configured for the next month by default.
+    String selectedMonth = 'next';
 
     final result = await showDialog<Map<String, dynamic>?>(
       context: context,
@@ -628,7 +707,10 @@ class _RecordScreenState extends State<RecordScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text('Add Bill', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              title: const Text(
+                'Add Bill',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -641,39 +723,61 @@ class _RecordScreenState extends State<RecordScreen> {
                         hintText: 'Water, Internet...',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.receipt_long, size: 28),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 18),
                     TextField(
                       controller: amountController,
                       style: const TextStyle(fontSize: 18),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: const InputDecoration(
                         labelText: 'Bill Amount',
                         hintText: 'Enter amount',
                         prefixText: '৳ ',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.payments, size: 28),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
                     const Align(
                       alignment: Alignment.centerLeft,
-                      child: Text('Add this bill to:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      child: Text(
+                        'Start this bill from:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
                     ),
                     RadioListTile<String>(
                       value: 'current',
                       groupValue: selectedMonth,
-                      onChanged: (value) => setDialogState(() => selectedMonth = value!),
-                      title: Text('Current Month (${_monthName(_currentMonth)})', style: const TextStyle(fontSize: 16)),
+                      onChanged: (value) =>
+                          setDialogState(() => selectedMonth = value!),
+                      title: Text(
+                        'Current Month (${_monthName(_currentMonth)})',
+                        style: const TextStyle(fontSize: 16),
+                      ),
                     ),
                     RadioListTile<String>(
                       value: 'next',
                       groupValue: selectedMonth,
-                      onChanged: (value) => setDialogState(() => selectedMonth = value!),
-                      title: Text('Next Month (${_monthName(_nextMonth)})', style: const TextStyle(fontSize: 16)),
+                      onChanged: (value) =>
+                          setDialogState(() => selectedMonth = value!),
+                      title: Text(
+                        'Next Month (${_monthName(_nextMonth)})',
+                        style: const TextStyle(fontSize: 16),
+                      ),
                     ),
                   ],
                 ),
@@ -681,25 +785,64 @@ class _RecordScreenState extends State<RecordScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialogContext, null),
-                  child: const Text('Cancel', style: TextStyle(fontSize: 17)),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(fontSize: 17),
+                  ),
                 ),
                 ElevatedButton(
                   onPressed: () {
                     final name = nameController.text.trim();
-                    final amount = double.tryParse(amountController.text.trim());
+                    final amount =
+                        double.tryParse(amountController.text.trim());
+
                     if (name.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter the bill name.', style: TextStyle(fontSize: 16))));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Enter the bill name.',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        ),
+                      );
                       return;
                     }
+
                     if (amount == null || amount <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid amount.', style: TextStyle(fontSize: 16))));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Enter a valid amount.',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        ),
+                      );
                       return;
                     }
-                    final DateTime targetMonth = selectedMonth == 'current' ? _currentMonth : _nextMonth;
-                    Navigator.pop(dialogContext, {'name': name, 'amount': amount, 'targetMonth': targetMonth});
+
+                    final targetMonth = selectedMonth == 'current'
+                        ? _currentMonth
+                        : _nextMonth;
+
+                    Navigator.pop(
+                      dialogContext,
+                      {
+                        'name': name,
+                        'amount': amount,
+                        'targetMonth': targetMonth,
+                      },
+                    );
                   },
-                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
-                  child: const Text('Add Bill', style: TextStyle(fontSize: 17)),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                  ),
+                  child: const Text(
+                    'Add Bill',
+                    style: TextStyle(fontSize: 17),
+                  ),
                 ),
               ],
             );
@@ -712,24 +855,38 @@ class _RecordScreenState extends State<RecordScreen> {
 
     if (result == null || !mounted) return;
 
-    final String name = result['name'] as String;
-    final double amount = result['amount'] as double;
-    final DateTime targetMonth = result['targetMonth'] as DateTime;
+    final name = result['name'] as String;
+    final amount = result['amount'] as double;
+    final targetMonth = result['targetMonth'] as DateTime;
+    final identityKey = name.toLowerCase().trim();
 
     setState(() {
-      widget.room.bills.add(
-        Bill(
-          id: DateTime.now().microsecondsSinceEpoch.toString(),
-          name: name,
-          amount: amount,
-          paidAmount: 0,
-          isRent: false,
-          targetMonth: targetMonth,
-        ),
+      final existing = _findBillForMonth(
+        identityKey: identityKey,
+        month: targetMonth,
       );
+
+      if (existing != null) {
+        existing.amount = amount;
+        existing.name = name;
+      } else {
+        widget.room.bills.add(
+          Bill(
+            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            name: name,
+            amount: amount,
+            paidAmount: 0,
+            isRent: false,
+            targetMonth: targetMonth,
+          ),
+        );
+      }
     });
 
-    _addLog('Added $name bill ${_money(amount)} for ${_monthName(targetMonth)} ${targetMonth.year}.');
+    _addLog(
+      'Added $name bill ${_money(amount)} for '
+      '${_monthName(targetMonth)} ${targetMonth.year}.',
+    );
   }
 
   // ======================================================
@@ -738,87 +895,177 @@ class _RecordScreenState extends State<RecordScreen> {
 
   Future<void> _showEditBillDialog(Bill bill) async {
     final nameController = TextEditingController(text: bill.name);
-    final amountController = TextEditingController(text: bill.amount.toStringAsFixed(0));
+    final amountController =
+        TextEditingController(text: bill.amount.toStringAsFixed(0));
+
+    // Editing always defaults to the next month so the current month's due
+    // is not accidentally changed.
+    String selectedMonth = 'next';
 
     final result = await showDialog<Map<String, dynamic>?>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(bill.isRent ? 'Edit Rent' : 'Edit Bill', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  enabled: !bill.isRent,
-                  style: const TextStyle(fontSize: 18),
-                  decoration: InputDecoration(
-                    labelText: 'Bill Name',
-                    border: const OutlineInputBorder(),
-                    helperText: bill.isRent ? 'Rent name cannot be changed.' : null,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text(
+                bill.isRent ? 'Edit Rent' : 'Edit Bill',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 22,
+                ),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      enabled: !bill.isRent,
+                      style: const TextStyle(fontSize: 18),
+                      decoration: InputDecoration(
+                        labelText: 'Bill Name',
+                        border: const OutlineInputBorder(),
+                        helperText: bill.isRent
+                            ? 'Rent name cannot be changed.'
+                            : null,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    TextField(
+                      controller: amountController,
+                      style: const TextStyle(fontSize: 18),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Amount',
+                        prefixText: '৳ ',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Start this amount from:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    RadioListTile<String>(
+                      contentPadding: EdgeInsets.zero,
+                      value: 'current',
+                      groupValue: selectedMonth,
+                      onChanged: (value) =>
+                          setDialogState(() => selectedMonth = value!),
+                      title: Text(
+                        'Current Month (${_monthName(_currentMonth)})',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                    RadioListTile<String>(
+                      contentPadding: EdgeInsets.zero,
+                      value: 'next',
+                      groupValue: selectedMonth,
+                      onChanged: (value) =>
+                          setDialogState(() => selectedMonth = value!),
+                      title: Text(
+                        'Next Month (${_monthName(_nextMonth)})',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                if (!bill.isRent)
+                  TextButton.icon(
+                    onPressed: () =>
+                        Navigator.pop(dialogContext, {'action': 'delete'}),
+                    icon: const Icon(
+                      Icons.delete,
+                      color: Colors.red,
+                      size: 22,
+                    ),
+                    label: const Text(
+                      'Delete',
+                      style: TextStyle(color: Colors.red, fontSize: 16),
+                    ),
+                  ),
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, null),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(fontSize: 17),
                   ),
                 ),
-                const SizedBox(height: 18),
-                TextField(
-                  controller: amountController,
-                  style: const TextStyle(fontSize: 18),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Amount',
-                    prefixText: '৳ ',
-                    border: OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    final newAmount =
+                        double.tryParse(amountController.text.trim());
+                    if (newAmount == null || newAmount < 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Enter a valid amount.',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+
+                    final newName = bill.isRent
+                        ? 'Rent'
+                        : nameController.text.trim();
+
+                    if (newName.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Bill name cannot be empty.',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+
+                    Navigator.pop(
+                      dialogContext,
+                      {
+                        'action': 'save',
+                        'name': newName,
+                        'amount': newAmount,
+                        'selectedMonth': selectedMonth,
+                      },
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 14),
-                Align(alignment: Alignment.centerLeft, child: Text('Original: ${_money(bill.amount)}', style: const TextStyle(color: Colors.grey, fontSize: 15))),
-                const SizedBox(height: 6),
-                Align(alignment: Alignment.centerLeft, child: Text('Paid: ${_money(bill.paidAmount)}', style: const TextStyle(color: Colors.grey, fontSize: 15))),
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Remaining: ${_money(_getRawRemaining(bill))}',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _getRawRemaining(bill) <= 0 ? Colors.green : Colors.orange),
+                  child: const Text(
+                    'Save',
+                    style: TextStyle(fontSize: 17),
                   ),
                 ),
               ],
-            ),
-          ),
-          actions: [
-            if (!bill.isRent)
-              TextButton.icon(
-                onPressed: () => Navigator.pop(dialogContext, {'action': 'delete'}),
-                icon: const Icon(Icons.delete, color: Colors.red, size: 22),
-                label: const Text('Delete', style: TextStyle(color: Colors.red, fontSize: 16)),
-              ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, null),
-              child: const Text('Cancel', style: TextStyle(fontSize: 17)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final newAmount = double.tryParse(amountController.text.trim());
-                if (newAmount == null || newAmount < 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid amount.', style: TextStyle(fontSize: 16))));
-                  return;
-                }
-                String newName = bill.name;
-                if (!bill.isRent) {
-                  newName = nameController.text.trim();
-                  if (newName.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill name cannot be empty.', style: TextStyle(fontSize: 16))));
-                    return;
-                  }
-                }
-                Navigator.pop(dialogContext, {'action': 'save', 'name': newName, 'amount': newAmount});
-              },
-              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
-              child: const Text('Save', style: TextStyle(fontSize: 17)),
-            ),
-          ],
+            );
+          },
         );
       },
     );
@@ -832,24 +1079,73 @@ class _RecordScreenState extends State<RecordScreen> {
       return;
     }
 
-    if (result['action'] == 'save') {
-      final oldName = bill.name;
-      final oldAmount = bill.amount;
-      final newName = result['name'] as String;
-      final newAmount = result['amount'] as double;
+    final oldName = bill.name;
+    final oldAmount = bill.amount;
+    final newName = result['name'] as String;
+    final newAmount = result['amount'] as double;
+    final monthChoice = result['selectedMonth'] as String? ?? 'next';
+    final targetMonth = monthChoice == 'current' ? _currentMonth : _nextMonth;
 
-      setState(() {
-        if (!bill.isRent) bill.name = newName;
-        bill.amount = newAmount;
-        if (bill.isRent) widget.room.baseRentAmount = newAmount;
-      });
+    setState(() {
+      final oldIdentityKey = _billIdentityKey(bill);
+      final targetIdentityKey = bill.isRent
+          ? 'rent'
+          : newName.toLowerCase().trim();
 
-      if (bill.isRent) {
-        _addLog('Rent changed from ${_money(oldAmount)} to ${_money(newAmount)}.');
-      } else {
-        _addLog('Bill updated: $oldName → ${bill.name}, ${_money(oldAmount)} → ${_money(newAmount)}.');
+      // A bill's name identifies its recurring bill type. Keep that identity
+      // consistent across its stored monthly records when the name is edited.
+      if (!bill.isRent && oldName.toLowerCase().trim() != targetIdentityKey) {
+        for (final storedBill in widget.room.bills) {
+          if (!storedBill.isRent &&
+              _billIdentityKey(storedBill) == oldIdentityKey) {
+            storedBill.name = newName;
+          }
+        }
       }
-    }
+
+      Bill? targetBill;
+      for (final candidate in widget.room.bills) {
+        if (_monthKey(candidate.targetMonth) != _monthKey(targetMonth)) {
+          continue;
+        }
+        if (_billIdentityKey(candidate) == targetIdentityKey) {
+          targetBill = candidate;
+          break;
+        }
+      }
+
+      if (targetBill == null) {
+        widget.room.bills.add(
+          Bill(
+            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            name: bill.isRent ? 'Rent' : newName,
+            amount: newAmount,
+            paidAmount: 0,
+            isRent: bill.isRent,
+            targetMonth: targetMonth,
+          ),
+        );
+      } else {
+        targetBill.amount = newAmount;
+        if (!targetBill.isRent) {
+          targetBill.name = newName;
+        }
+      }
+
+      // Rent is the recurring base amount. Changing it updates the amount
+      // that will be generated automatically in future months, while the
+      // target-month record above controls when this new amount starts.
+      if (bill.isRent) {
+        widget.room.baseRentAmount = newAmount;
+      }
+    });
+
+    widget.onDataChanged();
+    _addLog(
+      'Bill updated: $oldName → $newName, '
+      '${_money(oldAmount)} → ${_money(newAmount)} from '
+      '${_monthName(targetMonth)} ${targetMonth.year}.',
+    );
   }
 
   Future<void> _confirmDeleteBill(Bill bill) async {
@@ -894,8 +1190,23 @@ class _RecordScreenState extends State<RecordScreen> {
   // ======================================================
 
   Widget _buildBillCard(Bill bill) {
-    final double rawRemaining = _getRawRemaining(bill);
-    final bool paid = rawRemaining <= 0;
+    final nameKey = bill.name.toLowerCase().trim();
+
+    final IconData icon = bill.isRent
+        ? Icons.home
+        : nameKey == 'gas'
+            ? Icons.local_fire_department
+            : nameKey == 'electricity'
+                ? Icons.bolt
+                : Icons.receipt_long;
+
+    final Color iconColor = bill.isRent
+        ? Colors.teal
+        : nameKey == 'gas'
+            ? Colors.orange.shade700
+            : nameKey == 'electricity'
+                ? Colors.amber.shade800
+                : Colors.blueGrey;
 
     return GestureDetector(
       onTap: () => _showEditBillDialog(bill),
@@ -904,50 +1215,40 @@ class _RecordScreenState extends State<RecordScreen> {
         margin: const EdgeInsets.only(right: 14),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: paid ? Colors.green.shade50 : Colors.white,
+          color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: paid ? Colors.green : Colors.grey.shade300, width: 1.8),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.07), blurRadius: 5, offset: const Offset(0, 2))],
+          border: Border.all(
+            color: Colors.grey.shade300,
+            width: 1.8,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.07),
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              bill.isRent
-                  ? Icons.home
-                  : (bill.name.toLowerCase() == 'gas'
-                      ? Icons.local_fire_department
-                      : (bill.name.toLowerCase() == 'electricity' ? Icons.bolt : Icons.receipt_long)),
-              size: 34,
-              color: bill.isRent
-                  ? Colors.teal
-                  : (bill.name.toLowerCase() == 'gas'
-                      ? Colors.orange.shade700
-                      : (bill.name.toLowerCase() == 'electricity' ? Colors.amber.shade800 : Colors.blueGrey)),
-            ),
+            Icon(icon, size: 36, color: iconColor),
             const SizedBox(height: 10),
             Text(
               bill.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _money(rawRemaining),
-              style: TextStyle(
-                fontSize: 20,
+              style: const TextStyle(
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: paid ? Colors.green : Colors.teal,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
-              paid ? 'Payable' : 'Tap to edit',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: paid ? Colors.green : Colors.grey,
+              _money(bill.amount),
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],
@@ -1023,6 +1324,79 @@ class _RecordScreenState extends State<RecordScreen> {
   }
 
   // ======================================================
+  // PREVIOUS DUE
+  // ======================================================
+
+  Future<void> _showAddPreviousDueDialog() async {
+    final amountController = TextEditingController();
+
+    final result = await showDialog<double?>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text(
+            'Add Previous Due',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          content: TextField(
+            controller: amountController,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            style: const TextStyle(fontSize: 20),
+            decoration: const InputDecoration(
+              labelText: 'Previous Due Amount',
+              hintText: 'Enter amount',
+              prefixText: '৳ ',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, null),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(fontSize: 17),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final amount =
+                    double.tryParse(amountController.text.trim());
+                if (amount == null || amount <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Enter a valid amount.',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext, amount);
+              },
+              child: const Text(
+                'Add Due',
+                style: TextStyle(fontSize: 17),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    _disposeControllersAfterDialog([amountController]);
+
+    if (result == null || !mounted) return;
+
+    setState(() {
+      widget.room.previousDueAmount += result;
+    });
+
+    _addLog('Previous due added: ${_money(result)}.');
+  }
+
+  // ======================================================
   // CLEAR HISTORY & BUILD OTHERS
   // ======================================================
 
@@ -1033,21 +1407,49 @@ class _RecordScreenState extends State<RecordScreen> {
         return AlertDialog(
           title: const Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.red, size: 30),
+              Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.red,
+                size: 30,
+              ),
               SizedBox(width: 10),
-              Expanded(child: Text('Clear Whole History?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22))),
+              Expanded(
+                child: Text(
+                  'Clear Everything?',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                  ),
+                ),
+              ),
             ],
           ),
           content: const Text(
-            'This will permanently remove:\n\n• All bills\n• All rent payment records\n• All activity logs\n\nRenter name, ID and monthly rent settings will remain.\n\nRent, Gas and Electricity for the current month will be created again automatically.',
+            'This will permanently remove all bill records, all payments, all previous due amounts, and the entire activity log.\n\nThe renter name, ID document, room information, and room image will remain.\n\nRent, Gas, Electricity, and recurring bill cards will be recreated with zero amounts.',
             style: TextStyle(fontSize: 16),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel', style: TextStyle(fontSize: 17))),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(fontSize: 17),
+              ),
+            ),
             ElevatedButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12)),
-              child: const Text('Clear Everything', style: TextStyle(fontSize: 16)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 12,
+                ),
+              ),
+              child: const Text(
+                'Clear Everything',
+                style: TextStyle(fontSize: 16),
+              ),
             ),
           ],
         );
@@ -1059,15 +1461,24 @@ class _RecordScreenState extends State<RecordScreen> {
     setState(() {
       widget.room.bills.clear();
       widget.room.logs.clear();
+      widget.room.previousDueAmount = 0;
+      widget.room.baseRentAmount = 0;
     });
 
+    // Recreate only the fixed monthly cards, all with zero amounts.
     _ensureDefaultBillsForCurrentMonth(createLog: false);
-    widget.room.logs.insert(0, RentLog(id: DateTime.now().microsecondsSinceEpoch.toString(), date: DateTime.now(), description: 'All previous bill, payment, and activity history was cleared.'));
-    
-    widget.onDataChanged();
-    setState(() {});
 
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All history has been cleared.', style: TextStyle(fontSize: 16))));
+    widget.onDataChanged();
+    if (mounted) setState(() {});
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Everything has been cleared.',
+          style: TextStyle(fontSize: 16),
+        ),
+      ),
+    );
   }
 
   Widget _buildIdStatus() {
@@ -1211,31 +1622,41 @@ class _RecordScreenState extends State<RecordScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Rent Due: ${_money(_currentRentDue)}', style: const TextStyle(color: Colors.black54, fontSize: 15)),
-                Text('Bills Due: ${_money(_currentOtherBillsDue)}', style: const TextStyle(color: Colors.black54, fontSize: 15)),
-              ],
-            ),
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Bills This Month', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                const Text('Tap a bill to edit', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                const Text(
+                  'Added Bills',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                const Text(
+                  'Bill types',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
               ],
             ),
             const SizedBox(height: 12),
             SizedBox(
-              height: 155,
-              child: _currentBills.isEmpty
-                  ? Container(decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(16)), child: const Center(child: Text('No bills for this month.', style: TextStyle(color: Colors.grey, fontSize: 16))))
+              height: 175,
+              child: _addedBills.isEmpty
+                  ? Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'No bills have been added.',
+                          style: TextStyle(color: Colors.grey, fontSize: 16),
+                        ),
+                      ),
+                    )
                   : ListView.builder(
                       scrollDirection: Axis.horizontal,
-                      itemCount: _currentBills.length,
-                      itemBuilder: (context, index) => _buildBillCard(_currentBills[index]),
+                      itemCount: _addedBills.length,
+                      itemBuilder: (context, index) =>
+                          _buildBillCard(_addedBills[index]),
                     ),
             ),
             const SizedBox(height: 22),
@@ -1265,6 +1686,26 @@ class _RecordScreenState extends State<RecordScreen> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 56,
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _showAddPreviousDueDialog,
+                icon: const Icon(Icons.history_toggle_off, size: 26),
+                label: const Text(
+                  'Add Previous Due',
+                  style: TextStyle(fontSize: 17),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.shade100,
+                  foregroundColor: Colors.black87,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: 20),
           ],
