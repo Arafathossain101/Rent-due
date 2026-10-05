@@ -455,6 +455,7 @@ class _RecordScreenState extends State<RecordScreen> {
                               Icon(hasId ? Icons.verified : Icons.assignment_ind_outlined, color: hasId ? Colors.green : Colors.grey, size: 26),
                               const SizedBox(width: 10),
                               const Expanded(child: Text('ID Document (Optional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17))),
+                              if (hasId) _buildEyeButton(selectedIdPath),
                             ],
                           ),
                           const SizedBox(height: 10),
@@ -489,7 +490,7 @@ class _RecordScreenState extends State<RecordScreen> {
                 ),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(dialogContext, true),
-                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+                  style: _dialogButtonStyle,
                   child: const Text('Save', style: TextStyle(fontSize: 17)),
                 ),
               ],
@@ -547,51 +548,59 @@ class _RecordScreenState extends State<RecordScreen> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
+                        color: const Color(0xFFFFF3E0),
                         borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.orange.shade400, width: 2),
                       ),
                       child: Column(
                         children: [
-                          const Text('Total Bills Remaining', style: TextStyle(color: Colors.black54, fontSize: 16)),
+                          const Text('Total Bills Remaining', style: TextStyle(color: Colors.black87, fontSize: 17, fontWeight: FontWeight.w600)),
                           const SizedBox(height: 6),
                           Text(
                             _money(totalRemaining),
-                            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.orange),
+                            style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: Colors.deepOrange.shade900),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    RadioListTile<String>(
-                      contentPadding: EdgeInsets.zero,
-                      value: 'specific',
-                      groupValue: selectedOption,
-                      onChanged: (value) => setDialogState(() => selectedOption = value!),
-                      title: const Text('Specific Amount', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 17)),
-                      subtitle: const Text('Pay a custom amount', style: TextStyle(fontSize: 14)),
+                    const SizedBox(height: 20),
+                    _sectionLabel('How do you want to pay?'),
+                    const SizedBox(height: 10),
+                    _buildChoiceCard(
+                      selected: selectedOption == 'specific',
+                      onTap: () => setDialogState(() => selectedOption = 'specific'),
+                      icon: Icons.edit,
+                      title: 'Specific Amount',
+                      subtitle: 'Pay a custom amount',
                     ),
                     if (selectedOption == 'specific')
-                      TextField(
-                        controller: amountController,
-                        autofocus: true,
-                        style: const TextStyle(fontSize: 18),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'Amount to Pay',
-                          hintText: 'Enter amount',
-                          prefixText: '৳ ',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: TextField(
+                          controller: amountController,
+                          autofocus: true,
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(
+                            labelText: 'Amount to Pay',
+                            labelStyle: TextStyle(fontSize: 18),
+                            hintText: 'Enter amount',
+                            prefixText: '৳ ',
+                            border: OutlineInputBorder(),
+                            focusedBorder: OutlineInputBorder(
+                              borderSide: BorderSide(color: _brand, width: 2.5),
+                            ),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                          ),
                         ),
                       ),
-                    const SizedBox(height: 6),
-                    RadioListTile<String>(
-                      contentPadding: EdgeInsets.zero,
-                      value: 'full',
-                      groupValue: selectedOption,
-                      onChanged: (value) => setDialogState(() => selectedOption = value!),
-                      title: const Text('Full Payment', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 17)),
-                      subtitle: Text('Pay ${_money(totalRemaining)}', style: const TextStyle(fontSize: 14)),
+                    const SizedBox(height: 12),
+                    _buildChoiceCard(
+                      selected: selectedOption == 'full',
+                      onTap: () => setDialogState(() => selectedOption = 'full'),
+                      icon: Icons.verified,
+                      title: 'Full Payment',
+                      subtitle: 'Pay ${_money(totalRemaining)}',
                     ),
                   ],
                 ),
@@ -615,11 +624,7 @@ class _RecordScreenState extends State<RecordScreen> {
                     }
                     Navigator.pop(dialogContext, amount);
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  ),
+                  style: _dialogButtonStyle,
                   child: const Text('Update Bills', style: TextStyle(fontSize: 17)),
                 ),
               ],
@@ -749,35 +754,22 @@ class _RecordScreenState extends State<RecordScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Start this bill from:',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
+                    _sectionLabel('Start this bill from:'),
+                    const SizedBox(height: 10),
+                    _buildChoiceCard(
+                      selected: selectedMonth == 'current',
+                      onTap: () => setDialogState(() => selectedMonth = 'current'),
+                      icon: Icons.today,
+                      title: 'Current Month',
+                      subtitle: _monthLabel(_currentMonth),
                     ),
-                    RadioListTile<String>(
-                      value: 'current',
-                      groupValue: selectedMonth,
-                      onChanged: (value) =>
-                          setDialogState(() => selectedMonth = value!),
-                      title: Text(
-                        'Current Month (${_monthName(_currentMonth)})',
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ),
-                    RadioListTile<String>(
-                      value: 'next',
-                      groupValue: selectedMonth,
-                      onChanged: (value) =>
-                          setDialogState(() => selectedMonth = value!),
-                      title: Text(
-                        'Next Month (${_monthName(_nextMonth)})',
-                        style: const TextStyle(fontSize: 16),
-                      ),
+                    const SizedBox(height: 12),
+                    _buildChoiceCard(
+                      selected: selectedMonth == 'next',
+                      onTap: () => setDialogState(() => selectedMonth = 'next'),
+                      icon: Icons.event,
+                      title: 'Next Month',
+                      subtitle: _monthLabel(_nextMonth),
                     ),
                   ],
                 ),
@@ -833,12 +825,7 @@ class _RecordScreenState extends State<RecordScreen> {
                       },
                     );
                   },
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                  ),
+                  style: _dialogButtonStyle,
                   child: const Text(
                     'Add Bill',
                     style: TextStyle(fontSize: 17),
@@ -952,38 +939,23 @@ class _RecordScreenState extends State<RecordScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Start this amount from:',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
+                    const SizedBox(height: 20),
+                    _sectionLabel('Start this amount from:'),
+                    const SizedBox(height: 10),
+                    _buildChoiceCard(
+                      selected: selectedMonth == 'current',
+                      onTap: () => setDialogState(() => selectedMonth = 'current'),
+                      icon: Icons.today,
+                      title: 'Current Month',
+                      subtitle: _monthLabel(_currentMonth),
                     ),
-                    RadioListTile<String>(
-                      contentPadding: EdgeInsets.zero,
-                      value: 'current',
-                      groupValue: selectedMonth,
-                      onChanged: (value) =>
-                          setDialogState(() => selectedMonth = value!),
-                      title: Text(
-                        'Current Month (${_monthName(_currentMonth)})',
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ),
-                    RadioListTile<String>(
-                      contentPadding: EdgeInsets.zero,
-                      value: 'next',
-                      groupValue: selectedMonth,
-                      onChanged: (value) =>
-                          setDialogState(() => selectedMonth = value!),
-                      title: Text(
-                        'Next Month (${_monthName(_nextMonth)})',
-                        style: const TextStyle(fontSize: 16),
-                      ),
+                    const SizedBox(height: 12),
+                    _buildChoiceCard(
+                      selected: selectedMonth == 'next',
+                      onTap: () => setDialogState(() => selectedMonth = 'next'),
+                      icon: Icons.event,
+                      title: 'Next Month',
+                      subtitle: _monthLabel(_nextMonth),
                     ),
                   ],
                 ),
@@ -1052,12 +1024,7 @@ class _RecordScreenState extends State<RecordScreen> {
                       },
                     );
                   },
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                  ),
+                  style: _dialogButtonStyle,
                   child: const Text(
                     'Save',
                     style: TextStyle(fontSize: 17),
@@ -1334,20 +1301,55 @@ class _RecordScreenState extends State<RecordScreen> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text(
-            'Add Previous Due',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.history_toggle_off, color: _brand, size: 30),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Add Previous Due',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
           ),
-          content: TextField(
-            controller: amountController,
-            autofocus: true,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            style: const TextStyle(fontSize: 20),
-            decoration: const InputDecoration(
-              labelText: 'Previous Due Amount',
-              hintText: 'Enter amount',
-              prefixText: '৳ ',
-              border: OutlineInputBorder(),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: _brandSoft,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: _brand, width: 1.5),
+                  ),
+                  child: const Text(
+                    'Enter any unpaid amount from earlier months. It will be added to the Total Due.',
+                    style: TextStyle(fontSize: 16, color: _ink),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                TextField(
+                  controller: amountController,
+                  autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+                  decoration: const InputDecoration(
+                    labelText: 'Previous Due Amount',
+                    labelStyle: TextStyle(fontSize: 18),
+                    hintText: 'Enter amount',
+                    prefixText: '৳ ',
+                    border: OutlineInputBorder(),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: _brand, width: 2.5),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                  ),
+                ),
+              ],
             ),
           ),
           actions: [
@@ -1355,10 +1357,11 @@ class _RecordScreenState extends State<RecordScreen> {
               onPressed: () => Navigator.pop(dialogContext, null),
               child: const Text(
                 'Cancel',
-                style: TextStyle(fontSize: 17),
+                style: TextStyle(fontSize: 18, color: _ink, fontWeight: FontWeight.w600),
               ),
             ),
             ElevatedButton(
+              style: _dialogButtonStyle,
               onPressed: () {
                 final amount =
                     double.tryParse(amountController.text.trim());
@@ -1377,7 +1380,7 @@ class _RecordScreenState extends State<RecordScreen> {
               },
               child: const Text(
                 'Add Due',
-                style: TextStyle(fontSize: 17),
+                style: TextStyle(fontSize: 18),
               ),
             ),
           ],
@@ -1486,40 +1489,315 @@ class _RecordScreenState extends State<RecordScreen> {
     if (path == null || path.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(10)),
-        child: const Row(
+        decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(10)),
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.assignment_ind_outlined, color: Colors.grey, size: 20),
-            SizedBox(width: 6),
-            Text('Not added', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 14)),
+            Icon(Icons.assignment_ind_outlined, color: Colors.grey.shade700, size: 22),
+            const SizedBox(width: 6),
+            Text('Not added', style: TextStyle(color: Colors.grey.shade800, fontWeight: FontWeight.bold, fontSize: 15)),
           ],
         ),
       );
     }
     final bool isPdf = path.toLowerCase().endsWith('.pdf');
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 160),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(10)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(isPdf ? Icons.picture_as_pdf : Icons.image, color: Colors.green.shade700, size: 20),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              _getFileName(path),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.w600, fontSize: 14),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 110),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(10)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(isPdf ? Icons.picture_as_pdf : Icons.image, color: Colors.green.shade900, size: 20),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    'Added',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Colors.green.shade900, fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
+        const SizedBox(width: 8),
+        _buildEyeButton(path),
+      ],
+    );
+  }
+
+  // ======================================================
+  // ELDER-FRIENDLY UI HELPERS (visual only)
+  // ======================================================
+
+  static const Color _brand = Color(0xFF00695C); // deep teal, 6.9:1 with white
+  static const Color _brandSoft = Color(0xFFE0F2F1);
+  static const Color _ink = Color(0xFF1B1B1B);
+
+  String _monthLabel(DateTime date) => '${_monthName(date)} (${date.month})';
+
+  ButtonStyle get _mainButtonStyle => ElevatedButton.styleFrom(
+        backgroundColor: _brand,
+        foregroundColor: Colors.white,
+        elevation: 2,
+        minimumSize: const Size(0, 64),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      );
+
+  ButtonStyle get _dialogButtonStyle => ElevatedButton.styleFrom(
+        backgroundColor: _brand,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(110, 52),
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      );
+
+  Widget _sectionLabel(String text) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 18,
+          color: _ink,
+        ),
       ),
     );
   }
 
+  // Large tappable option box. Selected = solid colour, white text, thick
+  // border and a check mark. Not selected = faded (reduced opacity).
+  Widget _buildChoiceCard({
+    required bool selected,
+    required VoidCallback onTap,
+    required IconData icon,
+    required String title,
+    String? subtitle,
+  }) {
+    final Color fg = selected ? Colors.white : _ink;
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 200),
+      opacity: selected ? 1.0 : 0.6,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: selected ? _brand : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: selected ? _brand : Colors.grey.shade500,
+                width: selected ? 3 : 1.5,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: _brand.withOpacity(0.35),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              children: [
+                Icon(icon, size: 30, color: fg),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: fg,
+                        ),
+                      ),
+                      if (subtitle != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Text(
+                            subtitle,
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: selected ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                  size: 30,
+                  color: fg,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Small round "eye" button that opens the uploaded ID document.
+  Widget _buildEyeButton(String? path) {
+    return Tooltip(
+      message: 'View ID document',
+      child: Material(
+        color: _brand,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () => _viewIdDocument(path),
+          child: const SizedBox(
+            width: 44,
+            height: 44,
+            child: Icon(Icons.visibility, color: Colors.white, size: 26),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _viewIdDocument(String? path) async {
+    if (path == null || path.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No ID document uploaded.', style: TextStyle(fontSize: 16)),
+        ),
+      );
+      return;
+    }
+
+    final file = File(path);
+    final bool exists = await file.exists();
+    if (!mounted) return;
+
+    if (!exists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The ID file could not be found.', style: TextStyle(fontSize: 16)),
+        ),
+      );
+      return;
+    }
+
+    final bool isPdf = path.toLowerCase().endsWith('.pdf');
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.badge, color: _brand, size: 30),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'ID Document',
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      icon: const Icon(Icons.close, size: 30),
+                      tooltip: 'Close',
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: isPdf
+                    ? Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.picture_as_pdf, size: 80, color: Colors.red.shade700),
+                            const SizedBox(height: 12),
+                            Text(
+                              _getFileName(path),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'This ID is a PDF file. A preview is not available inside the app.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 16, color: Colors.black87),
+                            ),
+                          ],
+                        ),
+                      )
+                    : InteractiveViewer(
+                        minScale: 1,
+                        maxScale: 5,
+                        child: Image.file(
+                          file,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stack) => const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text(
+                              'This image could not be opened.',
+                              style: TextStyle(fontSize: 18),
+                            ),
+                          ),
+                        ),
+                      ),
+              ),
+              if (!isPdf)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Pinch to zoom',
+                    style: TextStyle(fontSize: 15, color: Colors.black87),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    style: _dialogButtonStyle,
+                    child: const Text('Close'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
   // ======================================================
   // BUILD SCREEN
   // ======================================================
@@ -1550,7 +1828,7 @@ class _RecordScreenState extends State<RecordScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Name', style: TextStyle(color: Colors.black54, fontSize: 14)),
+                          const Text('Name', style: TextStyle(color: Colors.black87, fontSize: 14)),
                           const SizedBox(height: 4),
                           Text(widget.room.renterName.trim().isEmpty ? 'Not added' : widget.room.renterName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 2),
@@ -1563,7 +1841,7 @@ class _RecordScreenState extends State<RecordScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          const Text('ID', style: TextStyle(color: Colors.black54, fontSize: 14)),
+                          const Text('ID', style: TextStyle(color: Colors.black87, fontSize: 14)),
                           const SizedBox(height: 5),
                           _buildIdStatus(),
                           const SizedBox(height: 2),
@@ -1585,7 +1863,7 @@ class _RecordScreenState extends State<RecordScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Current Date', style: TextStyle(color: Colors.black54, fontSize: 14)),
+                        const Text('Current Date', style: TextStyle(color: Colors.black87, fontSize: 14)),
                         const SizedBox(height: 6),
                         Text(_formatDate(DateTime.now()), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                       ],
@@ -1604,7 +1882,7 @@ class _RecordScreenState extends State<RecordScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Total Due', style: TextStyle(color: Colors.black54, fontSize: 14)),
+                        const Text('Total Due', style: TextStyle(color: Colors.black87, fontSize: 14)),
                         const SizedBox(height: 6),
                         FittedBox(
                           child: Text(
@@ -1612,7 +1890,7 @@ class _RecordScreenState extends State<RecordScreen> {
                             style: TextStyle(
                               fontSize: 30,
                               fontWeight: FontWeight.bold,
-                              color: _totalDue > 0 ? Colors.orange.shade800 : Colors.green.shade800,
+                              color: _totalDue > 0 ? Colors.deepOrange.shade900 : Colors.green.shade800,
                             ),
                           ),
                         ),
@@ -1664,47 +1942,44 @@ class _RecordScreenState extends State<RecordScreen> {
               children: [
                 Expanded(
                   child: SizedBox(
-                    height: 56,
+                    height: 64,
                     child: ElevatedButton.icon(
                       onPressed: _showUpdateBillsDialog,
-                      icon: const Icon(Icons.payments, size: 26),
-                      label: const Text('Update Bills', style: TextStyle(fontSize: 17)),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade100, foregroundColor: Colors.black87, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                      icon: const Icon(Icons.payments, size: 28),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Update Bills'),
+                      ),
+                      style: _mainButtonStyle,
                     ),
                   ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: SizedBox(
-                    height: 56,
+                    height: 64,
                     child: ElevatedButton.icon(
                       onPressed: _showAddBillDialog,
-                      icon: const Icon(Icons.add, size: 26),
-                      label: const Text('Add Bills', style: TextStyle(fontSize: 17)),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade100, foregroundColor: Colors.black87, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                      icon: const Icon(Icons.add_circle, size: 28),
+                      label: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Add Bills'),
+                      ),
+                      style: _mainButtonStyle,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             SizedBox(
-              height: 56,
+              height: 64,
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: _showAddPreviousDueDialog,
-                icon: const Icon(Icons.history_toggle_off, size: 26),
-                label: const Text(
-                  'Add Previous Due',
-                  style: TextStyle(fontSize: 17),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange.shade100,
-                  foregroundColor: Colors.black87,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
+                icon: const Icon(Icons.history_toggle_off, size: 28),
+                label: const Text('Add Previous Due'),
+                style: _mainButtonStyle,
               ),
             ),
             const SizedBox(height: 20),
